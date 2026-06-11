@@ -50,6 +50,13 @@ def run_job_hunt():
         errors.append(f"enrichment: {e}")
 
     try:
+        from crews.linkedin_crew import LinkedInCrew
+        jobs = LinkedInCrew(companies).run(jobs)
+    except Exception as e:
+        logger.error(f"LinkedIn crew failed: {e}", exc_info=True)
+        errors.append(f"linkedin: {e}")
+
+    try:
         from crews.output_crew import OutputCrew
         new_count = OutputCrew().run(jobs, companies_checked, run_start, errors)
         logger.info(f"Run complete — {new_count} new jobs added to sheet")
