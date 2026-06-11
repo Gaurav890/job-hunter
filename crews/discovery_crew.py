@@ -4,6 +4,7 @@ import logging
 from models.job import Job
 from tools.scrapers.greenhouse import scrape_greenhouse
 from tools.scrapers.lever import scrape_lever
+from tools.scrapers.ashby import scrape_ashby
 from tools.scrapers.company_direct import scrape_company_direct
 from tools.scrapers.career_url_discovery import discover_careers_url
 
@@ -30,14 +31,13 @@ class DiscoveryCrew:
         for company in self.companies:
             name = company.get("Company Name", "")
             domain = company.get("Domain", "")
-            # Careers URL is optional — auto-discovered if missing
             careers_url = (company.get("Careers Page URL") or "").strip()
             slug = domain.split(".")[0].lower() if domain else ""
 
             logger.info(f"Scraping: {name}")
             companies_checked += 1
 
-            # Greenhouse API (tries domain slug as board slug)
+            # Greenhouse API
             if slug:
                 self._add_jobs(
                     scrape_greenhouse(name, slug, self.target_titles),
@@ -45,7 +45,7 @@ class DiscoveryCrew:
                 )
                 time.sleep(0.3)
 
-            # Lever API (tries domain slug as board slug)
+            # Lever API
             if slug:
                 self._add_jobs(
                     scrape_lever(name, slug, self.target_titles),
@@ -53,19 +53,29 @@ class DiscoveryCrew:
                 )
                 time.sleep(0.3)
 
-            # Company-direct Playwright scrape
-            # If no URL in sheet, auto-discover via common patterns
+            # Ashby API (slug derived same way — domain prefix)
+            if slug:
+                self._add_jobs(
+                    scrape_ashby(name, slug, self.target_titles),
+                    all_jobs, seen_urls,
+                )
+                time.sleep(0.3)
+
+            # Company-direct Playwright scrape with auto-discovery fallback:
+            # 1. Use sheet URL if provided
+            # 2. Try fast HEAD-request patterns
+            # 3. Crawl homepage footer/nav (handled inside scrape_company_direct)
             if not careers_url and domain:
                 careers_url = discover_careers_url(domain) or ""
                 if careers_url:
-                    logger.debug(f"Auto-discovered careers URL for {name}: {careers_url}")
+                    logger.debug(f"HEAD-discovered careers URL for {name}: {careers_url}")
 
-            if careers_url:
-                self._add_jobs(
-                    scrape_company_direct(name, careers_url, self.target_titles),
-                    all_jobs, seen_urls,
-                )
-                time.sleep(1.0)
+            # Pass domain so company_direct can do homepage crawl if careers_url still empty
+            self._add_jobs(
+                scrape_company_direct(name, careers_url, self.target_titles, domain=domain),
+                all_jobs, seen_urls,
+            )
+            time.sleep(1.0)
 
         logger.info(f"Discovery complete: {len(all_jobs)} jobs from {companies_checked} companies")
         return all_jobs, companies_checked
