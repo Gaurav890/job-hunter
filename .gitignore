@@ -1,0 +1,21 @@
+# Secrets — never commit these
+.env
+client_secret*.json
+token.json
+
+# But DO track these JSON files
+!railway.toml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# Playwright
+.playwright/
+
+# OS
+.DS_Store
