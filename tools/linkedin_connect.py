@@ -78,8 +78,19 @@ async def _extract_contacts(page: Page) -> list[tuple[str, str]]:
 async def _search_company(company_name: str, slug: str) -> str:
     """Navigates LinkedIn people search and returns a contact info string."""
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(user_agent=UA)
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        context = await browser.new_context(
+            user_agent=UA,
+            viewport={"width": 1280, "height": 800},
+            locale="en-US",
+        )
+        # Hide the webdriver flag so LinkedIn doesn't fingerprint us as a bot
+        await context.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        )
         await _inject_cookie(context)
         page = await context.new_page()
 
