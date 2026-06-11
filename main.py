@@ -1,6 +1,10 @@
 import logging
+import os
+import sys
+import threading
 import time
 from datetime import datetime
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytz
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -16,6 +20,28 @@ logger = logging.getLogger(__name__)
 
 PT = pytz.timezone("America/Los_Angeles")
 
+
+# ── Health check server ───────────────────────────────────────────────────────
+
+class _HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+    def log_message(self, *args):
+        pass  # suppress per-request access logs
+
+
+def _start_health_server():
+    port = int(os.getenv("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), _HealthHandler)
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+    logger.info(f"Health check listening on port {port}")
+
+
+# ── Core pipeline ─────────────────────────────────────────────────────────────
 
 def run_job_hunt():
     run_start = time.time()
@@ -66,9 +92,18 @@ def run_job_hunt():
     logger.info(f"=== Run finished in {(time.time() - run_start) / 60:.1f} min ===")
 
 
-if __name__ == "__main__":
-    scheduler = BlockingScheduler(timezone=PT)
+# ── Entry point ───────────────────────────────────────────────────────────────
 
+if __name__ == "__main__":
+    if "--run-now" in sys.argv:
+        # Manual trigger: run once immediately and exit
+        logger.info("Manual trigger via --run-now")
+        run_job_hunt()
+        sys.exit(0)
+
+    _start_health_server()
+
+    scheduler = BlockingScheduler(timezone=PT)
     for hour in SCHEDULE_HOURS_PT:
         scheduler.add_job(
             run_job_hunt,
@@ -76,5 +111,8 @@ if __name__ == "__main__":
             id=f"job_hunt_{hour}h",
         )
 
-    logger.info(f"Scheduler started — runs at {SCHEDULE_HOURS_PT[0]}AM and {SCHEDULE_HOURS_PT[1] - 12}PM PT daily")
+    logger.info(
+        f"Scheduler started — runs at "
+        f"{SCHEDULE_HOURS_PT[0]}AM and {SCHEDULE_HOURS_PT[1] - 12}PM PT daily"
+    )
     scheduler.start()
