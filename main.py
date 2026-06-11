@@ -18,33 +18,45 @@ PT = pytz.timezone("America/Los_Angeles")
 
 
 def run_job_hunt():
-    start = time.time()
-    logger.info(f"=== Job hunt run starting at {datetime.now(PT).strftime('%Y-%m-%d %H:%M %Z')} ===")
+    run_start = time.time()
+    errors: list[str] = []
+    companies_checked = 0
+    jobs = []
+
+    logger.info(f"=== Run starting {datetime.now(PT).strftime('%Y-%m-%d %H:%M %Z')} ===")
 
     try:
-        # Phase 2: discovery crew
-        # from crews.discovery_crew import DiscoveryCrew
-        # jobs = DiscoveryCrew().run()
-
-        # Phase 3: enrichment crew (scoring + visa)
-        # from crews.enrichment_crew import EnrichmentCrew
-        # jobs = EnrichmentCrew().run(jobs)
-
-        # Phase 5: LinkedIn crew
-        # from crews.linkedin_crew import LinkedInCrew
-        # jobs = LinkedInCrew().run(jobs)
-
-        # Phase 3+: output crew (dedup + sheet write + run log)
-        # from crews.output_crew import OutputCrew
-        # OutputCrew().run(jobs)
-
-        logger.info("Scaffold run complete — crews will be wired in Phase 2+")
-
+        from tools.sheets import SheetsClient
+        sheets = SheetsClient()
+        companies = sheets.get_companies()
+        target_titles = sheets.get_target_titles()
+        logger.info(f"Loaded {len(companies)} companies, {len(target_titles)} titles")
     except Exception as e:
-        logger.error(f"Run failed: {e}", exc_info=True)
+        logger.error(f"Failed to load config from sheet: {e}", exc_info=True)
+        return
 
-    duration_min = (time.time() - start) / 60
-    logger.info(f"=== Run finished in {duration_min:.1f} min ===")
+    try:
+        from crews.discovery_crew import DiscoveryCrew
+        jobs, companies_checked = DiscoveryCrew(companies, target_titles).run()
+    except Exception as e:
+        logger.error(f"Discovery failed: {e}", exc_info=True)
+        errors.append(f"discovery: {e}")
+
+    try:
+        from crews.enrichment_crew import EnrichmentCrew
+        jobs = EnrichmentCrew(target_titles).run(jobs)
+    except Exception as e:
+        logger.error(f"Enrichment failed: {e}", exc_info=True)
+        errors.append(f"enrichment: {e}")
+
+    try:
+        from crews.output_crew import OutputCrew
+        new_count = OutputCrew().run(jobs, companies_checked, run_start, errors)
+        logger.info(f"Run complete — {new_count} new jobs added to sheet")
+    except Exception as e:
+        logger.error(f"Output failed: {e}", exc_info=True)
+
+    logger.info(f"=== Run finished in {(time.time() - run_start) / 60:.1f} min ===")
 
 
 if __name__ == "__main__":
@@ -57,5 +69,5 @@ if __name__ == "__main__":
             id=f"job_hunt_{hour}h",
         )
 
-    logger.info(f"Scheduler started — runs at {SCHEDULE_HOURS_PT[0]}AM and {SCHEDULE_HOURS_PT[1]-12}PM PT daily")
+    logger.info(f"Scheduler started — runs at {SCHEDULE_HOURS_PT[0]}AM and {SCHEDULE_HOURS_PT[1] - 12}PM PT daily")
     scheduler.start()
