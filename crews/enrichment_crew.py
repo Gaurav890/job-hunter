@@ -2,7 +2,7 @@ import logging
 
 from models.job import Job
 from tools.scoring import score_job
-from tools.visa_check import check_visa_tier1, apply_target_list_sponsorship
+from tools.visa_check import check_visa_tier1, check_visa_tier2, apply_target_list_sponsorship
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,7 @@ class EnrichmentCrew:
             if job.sponsorship_status == "No Sponsorship":
                 continue  # hard filter — never surface
 
+            job = check_visa_tier2(job)        # no-op for target list companies
             job = apply_target_list_sponsorship(job)
             job = score_job(job, self.target_titles)
 
