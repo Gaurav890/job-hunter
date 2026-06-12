@@ -16,11 +16,14 @@ class DiscoveryCrew:
         self.companies = companies
         self.target_titles = target_titles
 
-    def _add_jobs(self, new_jobs: list[Job], all_jobs: list[Job], seen_urls: set[str]) -> None:
+    def _add_jobs(self, new_jobs: list[Job], all_jobs: list[Job], seen_urls: set[str]) -> int:
+        added = 0
         for job in new_jobs:
             if job.url and job.url not in seen_urls:
                 seen_urls.add(job.url)
                 all_jobs.append(job)
+                added += 1
+        return added
 
     def run(self) -> tuple[list[Job], int]:
         """Returns (jobs, companies_checked)."""
@@ -36,10 +39,11 @@ class DiscoveryCrew:
 
             logger.info(f"Scraping: {name}")
             companies_checked += 1
+            api_hits = 0
 
             # Greenhouse API
             if slug:
-                self._add_jobs(
+                api_hits += self._add_jobs(
                     scrape_greenhouse(name, slug, self.target_titles),
                     all_jobs, seen_urls,
                 )
@@ -47,30 +51,35 @@ class DiscoveryCrew:
 
             # Lever API
             if slug:
-                self._add_jobs(
+                api_hits += self._add_jobs(
                     scrape_lever(name, slug, self.target_titles),
                     all_jobs, seen_urls,
                 )
                 time.sleep(0.3)
 
-            # Ashby API (slug derived same way — domain prefix)
+            # Ashby API
             if slug:
-                self._add_jobs(
+                api_hits += self._add_jobs(
                     scrape_ashby(name, slug, self.target_titles),
                     all_jobs, seen_urls,
                 )
                 time.sleep(0.3)
 
-            # Company-direct Playwright scrape with auto-discovery fallback:
+            # Skip Playwright if APIs already found jobs — avoids 30s timeouts on
+            # enterprise portals (Amazon, IBM, Oracle, etc.) that block headless browsers
+            if api_hits > 0:
+                logger.debug(f"Skipping Playwright for {name} — {api_hits} jobs found via API")
+                continue
+
+            # Company-direct Playwright scrape:
             # 1. Use sheet URL if provided
             # 2. Try fast HEAD-request patterns
-            # 3. Crawl homepage footer/nav (handled inside scrape_company_direct)
+            # 3. Crawl homepage footer/nav (inside scrape_company_direct)
             if not careers_url and domain:
                 careers_url = discover_careers_url(domain) or ""
                 if careers_url:
                     logger.debug(f"HEAD-discovered careers URL for {name}: {careers_url}")
 
-            # Pass domain so company_direct can do homepage crawl if careers_url still empty
             self._add_jobs(
                 scrape_company_direct(name, careers_url, self.target_titles, domain=domain),
                 all_jobs, seen_urls,

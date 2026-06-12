@@ -64,8 +64,8 @@ async def _click_see_all_jobs(page: Page) -> None:
 
 
 async def _extract_jobs(page: Page, url: str, company_name: str, target_titles: list[str]) -> list[Job]:
-    await page.goto(url, timeout=30000, wait_until="networkidle")
-    await page.wait_for_timeout(2000)
+    await page.goto(url, timeout=12000, wait_until="domcontentloaded")
+    await page.wait_for_timeout(1000)
 
     # Try to expand all visible job listings before scraping
     await _click_see_all_jobs(page)
