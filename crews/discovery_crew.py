@@ -7,6 +7,8 @@ from tools.scrapers.lever import scrape_lever
 from tools.scrapers.ashby import scrape_ashby
 from tools.scrapers.company_direct import scrape_company_direct
 from tools.scrapers.career_url_discovery import discover_careers_url
+from tools.scrapers.remotive import scrape_remotive
+from tools.scrapers.himalayas import scrape_himalayas
 
 logger = logging.getLogger(__name__)
 
@@ -86,5 +88,10 @@ class DiscoveryCrew:
             )
             time.sleep(1.0)
 
-        logger.info(f"Discovery complete: {len(all_jobs)} jobs from {companies_checked} companies")
+        # Job board scrapers — find matching jobs from any company, not just the list
+        logger.info("Running job board scrapers (Remotive, Himalayas)...")
+        self._add_jobs(scrape_remotive(self.target_titles), all_jobs, seen_urls)
+        self._add_jobs(scrape_himalayas(self.target_titles), all_jobs, seen_urls)
+
+        logger.info(f"Discovery complete: {len(all_jobs)} jobs from {companies_checked} companies + job boards")
         return all_jobs, companies_checked
